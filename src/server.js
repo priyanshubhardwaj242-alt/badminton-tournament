@@ -434,7 +434,11 @@ th,td{border:1px solid #999;padding:5px 7px;text-align:left;font-size:13px}th{ba
       }
       if (method !== 'GET') {
         const origin = req.headers.origin;
-        if (origin) { let host = null; try { host = new URL(origin).host; } catch {} if (host !== req.headers.host) throw E(403, 'Cross-origin request rejected'); }
+        if (origin) {
+          let host = null; try { host = new URL(origin).host; } catch {}
+          const fwd = trustProxy ? String(req.headers['x-forwarded-host'] || '').split(',')[0].trim() : '';
+          if (host !== req.headers.host && host !== fwd) throw E(403, 'Cross-origin request rejected');
+        }
         if (!String(req.headers['content-type'] || '').includes('application/json') && Number(req.headers['content-length'] || 0) > 0) throw E(415, 'Content-Type must be application/json');
       }
       const route = routes.find(r => r.method === method && r.re.test(url.pathname));
@@ -471,8 +475,19 @@ th,td{border:1px solid #999;padding:5px 7px;text-align:left;font-size:13px}th{ba
   return { server, broadcast, hashPassword, routes };
 }
 
+// For hosts without a terminal: create the first administrator from secret environment variables, only if no admin exists yet.
+function bootstrapAdmin(db, env = process.env) {
+  const u = env.ADMIN_USERNAME, pw = env.ADMIN_PASSWORD;
+  if (!u || !pw || db.prepare("SELECT 1 FROM users WHERE role='admin'").get()) return null;
+  if (!/^[A-Za-z0-9_.-]{3,32}$/.test(u) || pw.length < 10) return 'invalid';
+  const r = db.prepare('INSERT INTO users(username,email,password_hash,role) VALUES(?,?,?,?)').run(u, env.ADMIN_EMAIL || null, hashPassword(pw), 'admin');
+  C.audit(db, { id: Number(r.lastInsertRowid), username: u }, 'user.create_admin_env', 'user', Number(r.lastInsertRowid), null, 'startup');
+  return 'created';
+}
+
 if (require.main === module) {
   const db = open(cfg.dbPath), { server } = createApp(db);
+  const boot = bootstrapAdmin(db); if (boot === 'created') console.log('Administrator created from ADMIN_USERNAME / ADMIN_PASSWORD. Remove ADMIN_PASSWORD from your environment now.'); if (boot === 'invalid') console.error('ADMIN_USERNAME/ADMIN_PASSWORD ignored: username must be 3-32 letters/digits/_.- and password at least 10 characters.');
   const admins = db.prepare('SELECT COUNT(*) n FROM users WHERE role=?').get('admin').n, url = `http://localhost:${cfg.port}`;
   server.on('error', e => {
     if (e.code === 'EADDRINUSE') console.error(`\nPort ${cfg.port} is already in use. The tournament server is probably already running.\n  -> Open ${url} in your browser.\n  -> If it is not running, close the other program using this port, or set a different PORT in the .env file (for example PORT=3001).\n`);
@@ -495,4 +510,4 @@ if (require.main === module) {
   const stop = () => { server.close(); try { db.close(); } catch {} process.exit(0); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
 }
-module.exports = { createApp, hashPassword, verifyPassword };
+module.exports = { createApp, hashPassword, verifyPassword, bootstrapAdmin };

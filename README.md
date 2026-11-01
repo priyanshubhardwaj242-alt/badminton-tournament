@@ -54,6 +54,22 @@ npm run create-admin && npm start
 ```
 Put it behind HTTPS (Caddy or nginx reverse proxy to `127.0.0.1:3000`; for nginx disable buffering on `/api/events` with `proxy_buffering off`). Keep it as a **single process** - SQLite plus in-memory SSE clients assume one instance. Use systemd/pm2 to restart on failure. Nothing here has been deployed or load-tested by the author.
 
+## Putting it online (GitHub stores the code; a server runs it)
+GitHub **Pages cannot run this app** (it only serves static files; this app needs a Node.js server and a database). Turn Pages off in the repo's Settings > Pages. Use one of these:
+
+**A. GitHub Codespaces (free, runs on GitHub, good for the event days).** Free personal accounts get about 120 core-hours/month (roughly 60 hours on the default 2-core machine).
+1. Repo page > green **Code** button > **Codespaces** > **Create codespace on main**.
+2. In its terminal run `npm run create-admin`, then `npm start`.
+3. Open the **Ports** tab, right-click port **3000** > **Port Visibility > Public**, and share the `https://...app.github.dev` link.
+4. At github.com/settings/codespaces raise the **default idle timeout** (up to 4 hours; the default is 30 minutes). The site is only up while the codespace is running; keep the tab open during play, and do **not delete** the codespace (your data lives inside it). Run `npm run backup` and download `data/backups/`.
+The link changes if you recreate the codespace. Idle behaviour while people are only browsing the site has not been verified by the author; test with a few phones before the event.
+
+**B. Always-on hosting (best for a long or public event).** Connect this GitHub repo to a Node host and it redeploys on every push. Render's `render.yaml` is included (untested): it needs a **paid** instance plus a persistent disk (about $7/month + $0.25/GB at the time of writing; check current pricing). Render's **free** tier sleeps and has **no persistent disk**, so a free instance would lose your data. With no terminal, set `ADMIN_USERNAME` / `ADMIN_PASSWORD` as secrets (the first admin is created on start; remove the password afterwards). A `Dockerfile` is also included for Fly.io/Railway-style hosts (mount a volume at `/data`).
+
+**C. One laptop on local Wi-Fi (free, most reliable on the day).** `npm start`, everyone opens the *Wi-Fi address* printed in the terminal.
+
+Every push runs the test suite through GitHub Actions (`.github/workflows/test.yml`).
+
 ## Backups
 `npm run backup` writes a consistent copy to `data/backups/` (uses `VACUUM INTO`, safe while running; keeps the newest 30). Schedule it (e.g. cron every 15 min on event day) and copy the folder off the machine. Restore: stop the server, replace `data/tournament.db` (delete `-wal`/`-shm` files), start.
 

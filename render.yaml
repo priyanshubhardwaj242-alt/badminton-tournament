@@ -1,0 +1,23 @@
+# Render.com blueprint (UNTESTED by the author). A persistent disk is required, otherwise the database is lost on every restart,
+# and disks need a paid instance type. Set ADMIN_USERNAME / ADMIN_PASSWORD as secrets in the Render dashboard (then delete ADMIN_PASSWORD).
+services:
+  - type: web
+    name: badminton-tournament
+    runtime: node
+    plan: starter
+    buildCommand: "echo no build step"
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - { key: NODE_VERSION, value: "22" }
+      - { key: NODE_ENV, value: production }
+      - { key: COOKIE_SECURE, value: "1" }
+      - { key: TRUST_PROXY, value: "1" }
+      - { key: HOST, value: 0.0.0.0 }
+      - { key: DB_PATH, value: /var/data/tournament.db }
+      - { key: ADMIN_USERNAME, sync: false }
+      - { key: ADMIN_PASSWORD, sync: false }
+    disk:
+      name: tournament-data
+      mountPath: /var/data
+      sizeGB: 1

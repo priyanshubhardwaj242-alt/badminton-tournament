@@ -427,3 +427,23 @@ test('removing users, courts and volunteers: safeguards and edits', async () => 
   assert.equal((await second('DELETE', `/api/volunteers/${v.body.id}`, {})).status, 200); assert.equal((await t.staff('PATCH', `/api/volunteers/${v.body.id}`, { role: 'x' })).status, 403);
   await t.close();
 });
+
+test('first administrator can be bootstrapped from environment variables, once, with validation', async () => {
+  const { bootstrapAdmin } = require('../src/server'); const t = await boot();
+  assert.equal(bootstrapAdmin(t.db, {}), null); assert.equal(bootstrapAdmin(t.db, { ADMIN_USERNAME: 'owner', ADMIN_PASSWORD: 'short' }), 'invalid'); assert.equal(t.db.prepare('SELECT COUNT(*) n FROM users').get().n, 0);
+  assert.equal(bootstrapAdmin(t.db, { ADMIN_USERNAME: 'owner', ADMIN_PASSWORD: 'a-long-secret-pass' }), 'created');
+  assert.equal(bootstrapAdmin(t.db, { ADMIN_USERNAME: 'second', ADMIN_PASSWORD: 'another-long-pass' }), null, 'does nothing once an admin exists');
+  const c = t.client(); assert.equal((await c('POST', '/api/auth/login', { username: 'owner', password: 'a-long-secret-pass' })).status, 200);
+  assert.ok(t.db.prepare("SELECT password_hash h FROM users").get().h.startsWith('scrypt$'));
+  await t.close();
+});
+
+test('behind a trusted proxy the public host name is accepted; a foreign origin is still refused', async () => {
+  const { open } = require('../src/db'); const { createApp, hashPassword } = require('../src/server'); const db = open(':memory:'); const { server } = createApp(db, { trustProxy: true });
+  await new Promise(r => server.listen(0, '127.0.0.1', r)); const port = server.address().port;
+  db.prepare("INSERT INTO users(username,password_hash,role) VALUES('boss',?,'admin')").run(hashPassword('correct-horse-battery'));
+  const post = headers => fetch(`http://127.0.0.1:${port}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ username: 'boss', password: 'correct-horse-battery' }) });
+  assert.equal((await post({ Origin: 'https://my-site-3000.app.github.dev', 'X-Forwarded-Host': 'my-site-3000.app.github.dev' })).status, 200, 'public host via proxy header');
+  assert.equal((await post({ Origin: 'https://evil.example', 'X-Forwarded-Host': 'my-site-3000.app.github.dev' })).status, 403, 'other origins refused');
+  await new Promise(r => { server.close(r); server.closeAllConnections(); }); db.close();
+});
