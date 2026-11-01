@@ -1,0 +1,15 @@
+{
+  "name": "badminton-tournament-manager",
+  "version": "1.0.0",
+  "description": "Badminton tournament management: 3-court operations, live scoring, brackets, public site.",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "create-admin": "node --disable-warning=ExperimentalWarning scripts/create-admin.js",
+    "seed:demo": "node --disable-warning=ExperimentalWarning scripts/seed-demo.js",
+    "backup": "node --disable-warning=ExperimentalWarning scripts/backup.js",
+    "fuzz": "node --disable-warning=ExperimentalWarning scripts/fuzz.js",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.js"
+  }
+}
